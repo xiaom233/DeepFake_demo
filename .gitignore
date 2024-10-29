@@ -1,0 +1,7 @@
+models/*
+modules/__
+yolov8n-face.pt
+ema.state
+weight.pth
+
+.idea/*
