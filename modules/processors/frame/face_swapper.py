@@ -242,9 +242,9 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         cv2.imwrite(output_path, result)
 
 
-def process_image_numpy(source_path, target_arr):
+def process_image_numpy(source_arr, target_arr):
     if not modules.globals.map_faces:
-        source_face = get_one_face(cv2.imread(source_path))
+        source_face = get_one_face(source_arr)
         target_frame = target_arr
         result = process_frame(source_face, target_frame)
         return result

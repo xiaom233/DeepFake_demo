@@ -8,7 +8,13 @@ from PIL import Image
 from network import MFF_MoE
 import numpy as np
 from modules.processors.frame.face_swapper import process_image_numpy
+from time import time
+from modules.core import suggest_execution_providers
+import onnxruntime
 
+
+print(onnxruntime.get_available_providers())
+# exit(1)
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 local_weight_dir = r""
 
@@ -17,7 +23,8 @@ class NetInference():
     def __init__(self):
         self.net = MFF_MoE(pretrained=False)
         self.net.load(path=local_weight_dir)
-        self.net = nn.DataParallel(self.net).cuda()
+        # self.net = nn.DataParallel(self.net).cuda()
+        self.net = self.net.cuda()
         self.net.eval()
         self.transform_val = transforms.Compose([
             transforms.ToTensor(),
@@ -33,22 +40,26 @@ class NetInference():
         pred = pred.detach().cpu().numpy()
         return pred
 
-deepfake_detector = NetInference()
 
-detect_model = YOLO('yolov8n-face.pt').cuda()
+# deepfake_detector = NetInference()
+detect_model = YOLO('yolov8n-face.pt')
+
 source_path = r"imgs/musk.jpg"
+source_arr = cv2.imread(source_path)
 print(detect_model.names)
 webcamera = cv2.VideoCapture(0)
 # webcamera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
 # webcamera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-while True:
-    success, img = webcamera.read()
-    fake = process_image_numpy(source_path, img)
-    deep_fake_result = deepfake_detector.infer(fake)
-    results = detect_model(img, conf=0.5, stream=True)
-    fake_results = detect_model(fake, conf=0.5, stream=True)
 
+while True:
+    start = time()
+    success, img = webcamera.read()
+    fake = process_image_numpy(source_arr, img)
+    face_swapper_time = time()
+    # deep_fake_result = deepfake_detector.infer(fake)
+    results = detect_model(img, conf=0.5, stream=False)
+    yolo_process_time = time()
     rect_img = img
     rect_fake = fake
     # coordinates
@@ -56,9 +67,10 @@ while True:
         boxes = r.boxes
 
         for box in boxes:
+            box_start_time = time()
             # bounding box
             x1, y1, x2, y2 = box.xyxy[0]
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2) # convert to int values
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)  # convert to int values
 
             # put box in cam
             cv2.rectangle(rect_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
@@ -66,16 +78,15 @@ while True:
 
             # Draw a label with a name below the face
 
-
             # confidence
-            confidence = math.ceil((box.conf[0]*100))/100
+            confidence = math.ceil((box.conf[0] * 100)) / 100
             # print("Confidence --->", confidence)
 
             # class name
             cls = int(box.cls[0])
 
             # object details
-            org = [x1+6, y2-10]
+            org = [x1 + 6, y2 - 10]
             fontScale = 0.5
             color = (255, 255, 255)
             thickness = 1
@@ -83,45 +94,16 @@ while True:
             # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
             font = cv2.FONT_HERSHEY_DUPLEX
             cv2.putText(rect_img, f"Face:{confidence}", org, font, fontScale, color, thickness)
-
-    for r in fake_results:
-        boxes = r.boxes
-
-        for box in boxes:
-            # bounding box
-            x1, y1, x2, y2 = box.xyxy[0]
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2) # convert to int values
-
-            # put box in cam
-            cv2.rectangle(rect_fake, (x1, y1), (x2, y2), (0, 255, 0), 1)
-            cv2.rectangle(rect_fake, (x1, y2 - 25), (x2, y2), (0, 255, 0), cv2.FILLED)
-
-            # Draw a label with a name below the face
-
-
-            # confidence
-            confidence = math.ceil((box.conf[0]*100))/100
-            # print("Confidence --->", confidence)
-
-            # class name
-            cls = int(box.cls[0])
-
-            # object details
-            org = [x1+6, y2-10]
-            fontScale = 0.5
-            color = (255, 255, 255)
-            thickness = 1
-
-            # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-            font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(rect_fake, f"Fake face:{deep_fake_result}", org, font, fontScale, color, thickness)
-
+            # cv2.putText(rect_fake, f"Fake face:{deep_fake_result}", org, font, fontScale, color, thickness)
+            box_end_time = time()
+    print(f"yolo process time: {yolo_process_time - face_swapper_time}\t"
+          f"face swapper process time: {face_swapper_time - start}"
+          f"box drawing time: {box_end_time - box_start_time}")
     cv2.namedWindow("input", cv2.WINDOW_FREERATIO)
     cv2.namedWindow("fake", cv2.WINDOW_FREERATIO)
     cv2.namedWindow("input_detect", cv2.WINDOW_FREERATIO)
     cv2.namedWindow("deepfake_detect", cv2.WINDOW_FREERATIO)
 
-    # cv2.namedWindow("Webcam", 0)
     cv2.imshow('input', img)
     cv2.imshow('fake', fake)
     cv2.imshow('input_detect', rect_img)
