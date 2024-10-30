@@ -11,11 +11,13 @@ from modules.processors.frame.face_swapper import process_image_numpy
 from time import time
 from modules.core import suggest_execution_providers
 import onnxruntime
+import sys
 
 
 print(onnxruntime.get_available_providers())
 # exit(1)
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+sys.path.append(r"C:\Users\user\packages\ffmpeg-2024-10-27-git-bb57b78013-full_build\ffmpeg-2024-10-27-git-bb57b78013-full_build\bin")
 local_weight_dir = r""
 
 
@@ -41,7 +43,7 @@ class NetInference():
         return pred
 
 
-# deepfake_detector = NetInference()
+deepfake_detector = NetInference()
 detect_model = YOLO('yolov8n-face.pt')
 
 source_path = r"imgs/musk.jpg"
@@ -57,7 +59,8 @@ while True:
     success, img = webcamera.read()
     fake = process_image_numpy(source_arr, img)
     face_swapper_time = time()
-    # deep_fake_result = deepfake_detector.infer(fake)
+    deep_fake_result = deepfake_detector.infer(fake)
+    deep_fake_time = time()
     results = detect_model(img, conf=0.5, stream=False)
     yolo_process_time = time()
     rect_img = img
@@ -94,11 +97,11 @@ while True:
             # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
             font = cv2.FONT_HERSHEY_DUPLEX
             cv2.putText(rect_img, f"Face:{confidence}", org, font, fontScale, color, thickness)
-            # cv2.putText(rect_fake, f"Fake face:{deep_fake_result}", org, font, fontScale, color, thickness)
+            cv2.putText(rect_fake, f"Fake face:{deep_fake_result}", org, font, fontScale, color, thickness)
             box_end_time = time()
-    print(f"yolo process time: {yolo_process_time - face_swapper_time}\t"
-          f"face swapper process time: {face_swapper_time - start}"
-          f"box drawing time: {box_end_time - box_start_time}")
+    print(f"face swapper process time: {face_swapper_time - start}\t"
+          f"deepface process time: {deep_fake_time - face_swapper_time}\t"
+          f"yolo process time: {yolo_process_time - deep_fake_time}\t")
     cv2.namedWindow("input", cv2.WINDOW_FREERATIO)
     cv2.namedWindow("fake", cv2.WINDOW_FREERATIO)
     cv2.namedWindow("input_detect", cv2.WINDOW_FREERATIO)
