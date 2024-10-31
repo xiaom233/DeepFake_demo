@@ -12,6 +12,7 @@ from time import time
 from modules.core import suggest_execution_providers
 import onnxruntime
 import sys
+import torch
 
 
 print(onnxruntime.get_available_providers())
@@ -20,13 +21,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 sys.path.append(r"C:\Users\user\packages\ffmpeg-2024-10-27-git-bb57b78013-full_build\ffmpeg-2024-10-27-git-bb57b78013-full_build\bin")
 local_weight_dir = r""
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 class NetInference():
     def __init__(self):
         self.net = MFF_MoE(pretrained=False)
         self.net.load(path=local_weight_dir)
         # self.net = nn.DataParallel(self.net).cuda()
-        self.net = self.net.cuda()
+        self.net = self.net.to(device)
         self.net.eval()
         self.transform_val = transforms.Compose([
             transforms.ToTensor(),
@@ -37,7 +40,7 @@ class NetInference():
     def infer(self, x):
         # x = cv2.imread(input_path)[..., ::-1]
         x = Image.fromarray(np.uint8(x))
-        x = self.transform_val(x).unsqueeze(0).cuda()
+        x = self.transform_val(x).unsqueeze(0).to(device)
         pred = self.net(x)
         pred = pred.detach().cpu().numpy()
         return pred
@@ -53,6 +56,10 @@ webcamera = cv2.VideoCapture(0)
 # webcamera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
 # webcamera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
+cv2.namedWindow("input", 0)
+cv2.namedWindow("fake", 0)
+cv2.namedWindow("input_detect", 0)
+cv2.namedWindow("deepfake_detect", 0)
 
 while True:
     start = time()
@@ -78,6 +85,8 @@ while True:
             # put box in cam
             cv2.rectangle(rect_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
             cv2.rectangle(rect_img, (x1, y2 - 25), (x2, y2), (0, 255, 0), cv2.FILLED)
+            cv2.rectangle(rect_fake, (x1, y1), (x2, y2), (0, 255, 0), 1)
+            cv2.rectangle(rect_fake, (x1, y2 - 25), (x2, y2), (0, 255, 0), cv2.FILLED)
 
             # Draw a label with a name below the face
 
@@ -102,15 +111,12 @@ while True:
     print(f"face swapper process time: {face_swapper_time - start}\t"
           f"deepface process time: {deep_fake_time - face_swapper_time}\t"
           f"yolo process time: {yolo_process_time - deep_fake_time}\t")
-    cv2.namedWindow("input", cv2.WINDOW_FREERATIO)
-    cv2.namedWindow("fake", cv2.WINDOW_FREERATIO)
-    cv2.namedWindow("input_detect", cv2.WINDOW_FREERATIO)
-    cv2.namedWindow("deepfake_detect", cv2.WINDOW_FREERATIO)
 
     cv2.imshow('input', img)
     cv2.imshow('fake', fake)
     cv2.imshow('input_detect', rect_img)
     cv2.imshow('deepfake_detect', rect_fake)
+
     if cv2.waitKey(1) == ord('q'):
         break
 
